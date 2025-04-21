@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Round Robin with Priority Scheduling</title>
+   <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+   <style>
+       body {
+           font-family: Arial, sans-serif;
+           background-color: rgb(197, 217, 218);
+           font-family:'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+       }
+       .container {
+           width: 80%;
+           margin: auto;
+           padding: 20px;
+       }
+       #gantt-chart {
+           display: flex;
+           margin-top: 20px;
+       }
+       .gantt-bar {
+           background-color: #424542;
+           color: white;
+           padding: 5px;
+           margin-right: 2px;
+       }
+       .btn{
+           background-color: rgb(89, 96, 95);
+           color: white;
+       }
+   </style>
+</head>
+<body>
+   <div class="container">
+       <h1 style="text-align: center; font-weight: bold; padding:20px; font-size:50px;">Round Robin with Priority Scheduling</h1>
+       <hr><br>
+       <div class="input-section">
+           <h2>Enter Process Details</h2><br>
+           <form id="processForm">
+               <div class="row g-3 align-items-center">
+                   <div class="col-auto">
+                     <label for="timeQuantum" class="col-form-label">Time Quantum</label>
+                   </div>
+                   <div class="col-auto">
+                     <input type="number" id="timeQuantum" class="form-control" aria-describedby="timeQuantumHelpInline" required>
+                   </div>
+                 </div>
+                
+               <br><br>
+               <table id="processTable" class="table table-striped table-bordered">
+                   <thead class="table-dark">
+                       <tr>
+                           <th>Process ID</th>
+                           <th>Burst Time</th>
+                           <th>Priority</th>
+                           <th>Arrival Time</th>
+                       </tr>
+                   </thead>
+                   <tbody>
+                       <tr>
+                           <td><input type="text" class="process-id form-control" required></td>
+                           <td><input type="number" class="burst-time form-control" required></td>
+                           <td><input type="number" class="priority form-control" required></td>
+                           <td><input type="number" class="arrival-time form-control" required></td>
+                       </tr>
+                   </tbody>
+               </table>
+               <button type="button" class="btn" onclick="addRow()">Add Process</button>
+               <button type="button" class="btn" onclick="calculate()">Calculate</button>
+           </form>
+       </div>
+       <br><br>
+       <div class="output-section">
+           <h2>Gantt Chart</h2><br>
+           <div id="gantt-chart"></div>
+           <h4>Process Details</h4><br>
+           <table id="resultsTable" class="table table-striped table-bordered">
+               <thead class="table-dark">
+                   <tr>
+                       <th>Process ID</th>
+                       <th>Completion Time</th>
+                       <th>Turnaround Time (TAT)</th>
+                       <th>Waiting Time (WT)</th>
+                   </tr>
+               </thead>
+               <tbody></tbody>
+           </table>
+       </div>
+   </div>
+
+
+   <script>
+       function addRow() {
+           const table = document.getElementById("processTable").getElementsByTagName('tbody')[0];
+           const row = table.insertRow();
+           row.innerHTML = `
+               <td><input type="text" class="process-id form-control" required></td>
+               <td><input type="number" class="burst-time form-control" required></td>
+               <td><input type="number" class="priority form-control" required></td>
+               <td><input type="number" class="arrival-time form-control" required></td>
+           `;
+       }
+
+
+       function calculate() {
+           const timeQuantum = parseInt(document.getElementById("timeQuantum").value);
+           const processes = [];
+           const ids = document.querySelectorAll(".process-id");
+           const burstTimes = document.querySelectorAll(".burst-time");
+           const priorities = document.querySelectorAll(".priority");
+           const arrivalTimes = document.querySelectorAll(".arrival-time");
+
+
+           // Collect process information from the form
+           for (let i = 0; i < ids.length; i++) {
+               processes.push({
+                   id: ids[i].value,
+                   burstTime: parseInt(burstTimes[i].value),
+                   remainingTime: parseInt(burstTimes[i].value),
+                   priority: parseInt(priorities[i].value),
+                   arrivalTime: parseInt(arrivalTimes[i].value),
+                   completionTime: 0,
+                   turnaroundTime: 0,
+                   waitingTime: 0
+               });
+           }
+
+
+           let currentTime = 0;
+           const ganttChart = [];
+
+
+           // Perform scheduling
+           while (processes.some(p => p.remainingTime > 0)) {
+               // Get only processes that have arrived and have remaining burst time
+               const availableProcesses = processes
+                   .filter(p => p.remainingTime > 0 && p.arrivalTime <= currentTime)
+                   .sort((a, b) => a.priority - b.priority || a.arrivalTime - b.arrivalTime);
+
+
+               let process = availableProcesses[0];
+
+
+               // If no process is available, increment time
+               if (!process) {
+                   currentTime++;
+                   continue;
+               }
+
+
+               // Execute the process for either time quantum or remaining burst time, whichever is less
+               const executionTime = Math.min(timeQuantum, process.remainingTime);
+               ganttChart.push({ id: process.id, start: currentTime, duration: executionTime });
+
+
+               process.remainingTime -= executionTime;
+               currentTime += executionTime;
+
+
+               // Mark completion time if process has finished
+               if (process.remainingTime <= 0) {
+                   process.completionTime = currentTime;
+                   process.turnaroundTime = process.completionTime - process.arrivalTime;
+                   process.waitingTime = process.turnaroundTime - process.burstTime;
+               }
+           }
+
+
+           displayGanttChart(ganttChart);
+           displayResults(processes);
+       }
+
+
+       function displayGanttChart(ganttChart) {
+           const chartContainer = document.getElementById("gantt-chart");
+           chartContainer.innerHTML = "";
+           ganttChart.forEach(segment => {
+               const bar = document.createElement("div");
+               bar.classList.add("gantt-bar");
+               bar.style.width = `${segment.duration * 20}px`;
+               bar.textContent = `${segment.id} (${segment.start}-${segment.start + segment.duration})`;
+               chartContainer.appendChild(bar);
+           });
+       }
+
+
+       function displayResults(processes) {
+           const resultsTable = document.getElementById("resultsTable").getElementsByTagName("tbody")[0];
+           resultsTable.innerHTML = ""; // Clear previous results
+
+
+           processes.forEach(process => {
+               const row = resultsTable.insertRow();
+               row.innerHTML = `
+                   <td>${process.id}</td>
+                   <td>${process.completionTime}</td>
+                   <td>${process.turnaroundTime}</td>
+                   <td>${process.waitingTime}</td>
+               `;
+           });
+       }
+   </script>
+</body>
+</html>
+
